@@ -1,0 +1,138 @@
+class MultipleObjectsReturned(Exception):
+    pass
+
+class DoesNotExist(Exception):
+    pass
+
+class InvalidField(Exception):
+    pass
+
+class Student:
+    def __init__(self, name, age, score, student_id = None):
+        self.name = name
+        self.student_id = student_id
+        self.age = age
+        self.score = score
+        
+    @classmethod    
+    def get(cls, **kwargs):
+
+        fields = ['student_id', 'name', 'age', 'score']
+        
+        for key_word, value in kwargs.items():
+            if key_word not in fields:
+                raise InvalidField
+            sql_query = f'SELECT * FROM Student WHERE {key_word} = "{value}"'
+            ans = read_data(sql_query)
+            
+        if ans == []:
+            raise DoesNotExist
+        
+        if len(ans) > 1:
+            raise MultipleObjectsReturned
+            
+        return cls(student_id = ans[0][0], name = ans[0][1], age = ans[0][2], score = ans[0][3])
+
+    def save(self):
+        import sqlite3
+        connection = sqlite3.connect("selected_students.sqlite3")
+        crsr = connection.cursor()
+
+        crsr.execute("PRAGMA foreign_keys=on;")
+        id = self.student_id
+        if id == None:
+            query = f'INSERT INTO Student(name, age, score) values(?, ?, ?)'
+            values = (self.name, self.age, self.score)
+            crsr.execute(query, values)
+            self.student_id = crsr.lastrowid
+            
+        if id != None:
+            crsr.execute(f'SELECT student_id FROM Student WHERE student_id = {id}')
+            value_to_find = crsr.fetchall()
+            if value_to_find == []:
+                query = f'INSERT INTO Student(student_id, name, age, score) values(?, ?, ?, ?)'
+                values = (self.student_id, self.name, self.age, self.score)
+                crsr.execute(query, values)
+            else:
+                query = '''UPDATE Student
+                            SET name = ?, age = ?, score = ?
+                            WHERE student_id = ?
+                         '''
+                values = (self.name, self.age, self.score, self.student_id)
+                crsr.execute(query, values)
+        connection.commit()
+        connection.close()
+    
+    def delete(self):
+        id = self.student_id
+        sql_query = f'DELETE FROM Student WHERE student_id = {id}'
+        write_data(sql_query)
+        
+
+    
+    @classmethod
+    def filter(cls, **kwargs):
+        
+        fields = ['student_id', 'name', 'age', 'score']
+        
+        objects_list = []
+        
+        for key_word, value in kwargs.items():
+            parameter = key_word.split('__')
+            field = parameter[0]
+            if field not in fields:
+                raise InvalidField
+            if len(parameter) != 1:
+                operation = parameter[1]
+            if len(parameter) == 1:
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} = "{value}"'
+            elif operation == 'gt':
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} > "{value}"'
+            elif operation == 'gte':
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} >= "{value}"'
+            elif operation == 'lt':
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} < "{value}"'
+            elif operation == 'lte':
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} <= "{value}"'
+            elif operation == 'neq':
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} != "{value}"'
+            elif operation == 'in':
+                value = tuple(value)
+                sql_query = f'SELECT * FROM Student WHERE {parameter[0]} in {value}'
+            elif operation == 'contains':
+                sql_query = f'SELECT * FROM Student WHERE name like "%{value}%"'
+            ans = read_data(sql_query)
+        
+            for student_obj in ans:
+                objects_list.append(cls(student_id = student_obj[0], name = student_obj[1], age = student_obj[2], score = student_obj[3]))
+        
+        return objects_list
+        
+    def __repr__(self):
+        return "Student(student_id={0}, name={1}, age={2}, score={3})".format(
+            self.student_id,
+            self.name,
+            self.age,
+            self.score)
+        
+        
+def write_data(sql_query):
+	import sqlite3
+	connection = sqlite3.connect("selected_students.sqlite3")
+	crsr = connection.cursor() 
+	crsr.execute("PRAGMA foreign_keys=on;") 
+	crsr.execute(sql_query) 
+	connection.commit() 
+	connection.close()
+
+def read_data(sql_query):
+	import sqlite3
+	connection = sqlite3.connect("selected_students.sqlite3")
+	crsr = connection.cursor() 
+	crsr.execute(sql_query) 
+	ans= crsr.fetchall()  
+	connection.close()
+	return ans
+
+# s = Student.filter(age__in= [24, 54])
+# print(s)
