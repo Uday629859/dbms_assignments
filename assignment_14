@@ -1,0 +1,105 @@
+class MultipleObjectsReturned(Exception):
+    pass
+
+class DoesNotExist(Exception):
+    pass
+
+class InvalidField(Exception):
+    pass
+
+class Student:
+    def __init__(self, name, age, score, student_id = None):
+        self.name = name
+        self.student_id = student_id
+        self.age = age
+        self.score = score
+    
+    @classmethod
+    def avg(cls, field, **kwargs):
+        avg_of_field = cls.common_aggregate('avg', field, **kwargs)
+        return avg_of_field
+        
+    @classmethod
+    def min(cls, field, **kwargs):
+        min_of_field = cls.common_aggregate('min', field, **kwargs)
+        return min_of_field
+        
+    @classmethod
+    def max(cls, field, **kwargs):
+        max_of_field = cls.common_aggregate('max', field, **kwargs)
+        return max_of_field
+        
+    @classmethod
+    def sum(cls, field, **kwargs):
+        sum_of_field = cls.common_aggregate('sum', field, **kwargs)
+        return sum_of_field
+        
+    @classmethod
+    def count(cls, field = '*', **kwargs):
+        count_of_field = cls.common_aggregate('count', field, **kwargs)
+        return count_of_field
+    
+    
+    
+    @staticmethod
+    def common_aggregate(aggregate_function, field = '*', **kwargs):
+        
+        fields = ['student_id', 'name', 'age', 'score', '*']
+        
+        operations = {'eq': '=', 'gt': '>', 'gte': '>=', 'lt': '<', 'lte': '<=', 'neq': '!=', 'in' : 'in'}
+        
+        conditions_list = []
+        
+        if field  not in fields:
+                raise InvalidField
+        
+        for key_word, value in kwargs.items():
+            parameter = key_word.split('__')
+            column = parameter[0]
+            
+            if column not in fields:
+                raise InvalidField
+                
+            if len(parameter) == 1:
+                operation = 'eq'
+            else:
+                operation = parameter[1]
+                
+            if operation == 'contains':
+                conditions_list.append(f'{column} like "%{value}%"')
+            elif operation != 'in':
+                conditions_list.append(f'{column} {operations[operation]} "{value}"')
+            else:
+                if len(value) > 1:
+                    conditions_list.append(f'{column} {operations[operation]} {tuple(value)}')
+                else:
+                    operation = 'eq'
+                    conditions_list.append(f'{column} {operations[operation]} "{value}"')
+        conditions = ' and '.join(conditions_list)
+        
+        if conditions == '':
+            sql_query = f'SELECT {aggregate_function}({field}) FROM Student'
+        else:
+            sql_query = f'SELECT {aggregate_function}({field}) FROM Student WHERE {conditions}'
+        
+        ans = read_data(sql_query)
+        
+        return ans[0][0]
+
+def write_data(sql_query):
+	import sqlite3
+	connection = sqlite3.connect("students.sqlite3")
+	crsr = connection.cursor() 
+	crsr.execute("PRAGMA foreign_keys=on;") 
+	crsr.execute(sql_query) 
+	connection.commit() 
+	connection.close()
+
+def read_data(sql_query):
+	import sqlite3
+	connection = sqlite3.connect("students.sqlite3")
+	crsr = connection.cursor() 
+	crsr.execute(sql_query) 
+	ans= crsr.fetchall()  
+	connection.close()
+	return ans
